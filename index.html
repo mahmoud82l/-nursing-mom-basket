@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>سلة الأم المرضعة ULTRA</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <div class="game-wrapper">
+    <!-- الشريط العلوي الموحد جوه الجيم فقط -->
+    <header class="game-hud hidden" id="gameHud">
+      <div class="hud-right">
+        <div class="hud-pill score-pill" title="سكور الجيم الحالي">
+          <span>🏆</span>
+          <span id="gameScoreDisplay">0</span>
+        </div>
+        <div class="hud-pill coin-pill" title="رصيد الكوينز">
+          <span>🪙</span>
+          <span id="hudCoinsDisplay">0</span>
+        </div>
+      </div>
+
+      <div class="hud-center">
+        <div class="timer-tag">⏱️ <span id="timerDisplay">00:00</span></div>
+        <div class="lives-row" id="livesDisplay">❤️❤️❤️❤️❤️</div>
+      </div>
+
+      <div class="hud-left">
+        <button class="hud-btn" id="soundBtn" title="الصوت">🔊</button>
+        <button class="hud-btn" id="pauseBtn" title="إيقاف مؤقت">⏸️</button>
+        <button class="hud-btn btn-exit" id="exitGameBtn" title="خروج للقائمة">🚪</button>
+      </div>
+    </header>
+
+    <!-- ساحة اللعب -->
+    <main class="canvas-container" id="canvasContainer">
+      <canvas id="gameCanvas"></canvas>
+
+      <!-- كبسولة التنبيهات الطايرة جوه الجيم -->
+      <div class="floating-tip-pill hidden" id="tipBar">
+        <span class="tip-badge-icon" id="tipIcon">🤱</span>
+        <span class="tip-text" id="tipText">حركي السلة في كل الاتجاهات ولمّي الأكل المفيد!</span>
+      </div>
+
+      <!-- إشعارات ديناميكية -->
+      <div class="levelup-toast" id="levelUpToast">🎉 ترقية! وصلت ليفل 2</div>
+      <div class="boss-banner hidden" id="bossBanner">🦈⚠️ تحذير! البيبي القرش المشاغب قادم ⚠️🦈</div>
+
+      <!-- الشاشة الرئيسية (Lobby) -->
+      <section class="overlay main-lobby-overlay" id="startOverlay">
+        <div class="floating-particles" id="techParticles"></div>
+
+        <!-- شريط الليفل والكوينز والمتجر في الشاشة الرئيسية -->
+        <div class="lobby-top-bar">
+          <div class="lobby-level-card">
+            <div class="lobby-lvl-row">
+              <span class="lvl-badge">⭐ ليفل <b id="mainLevelDisplay">1</b></span>
+              <span class="xp-text" id="mainXpText">0 / 1200 XP</span>
+            </div>
+            <div class="lobby-xp-track">
+              <div class="lobby-xp-fill" id="mainXpFill"></div>
+            </div>
+          </div>
+
+          <div class="lobby-actions-top">
+            <div class="lobby-coin-pill">🪙 <span id="mainCoinsDisplay">0</span></div>
+            <button class="btn-lobby-shop" id="openShopBtn">🛍️ المتجر</button>
+            <button class="btn-lobby-music" id="lobbyMusicBtn" title="تشغيل/كتم مزيكا الرقص">🎵</button>
+          </div>
+        </div>
+
+        <!-- مسرح البيبي اللي بيكربش ويلبس النضارة ويرقص -->
+        <div class="baby-stage" id="babyStage">
+          <div class="stage-spotlight"></div>
+          <div class="dance-notes" id="danceNotes">🎵 🎶 🕺 🎶 🎵</div>
+
+          <div class="baby-actor" id="babyActor">
+            <svg class="baby-svg" viewBox="0 0 140 95" width="135" height="90">
+              <!-- ظل -->
+              <ellipse cx="70" cy="84" rx="44" ry="6" fill="rgba(56, 189, 248, 0.25)" />
+              <!-- الرجل الخلفية -->
+              <path class="limb-leg-back" d="M92 58 Q112 60 118 74 L106 78 Q98 68 86 66 Z" fill="#fbcfe8" stroke="#f472b6" stroke-width="2"/>
+              <!-- الجسم -->
+              <rect x="52" y="44" width="46" height="24" rx="12" fill="#38bdf8" />
+              <!-- الحفاضة -->
+              <path d="M80 44 H92 A10 10 0 0 1 102 54 V58 A10 10 0 0 1 92 68 H80 Z" fill="#ffffff" stroke="#e2e8f0" stroke-width="2"/>
+              <!-- الرجل الأمامية -->
+              <path class="limb-leg-front" d="M88 62 Q104 70 102 80 L90 80 Q90 72 80 67 Z" fill="#fed7aa" stroke="#fb923c" stroke-width="2"/>
+              <!-- الذراع الخلفية -->
+              <path class="limb-arm-back" d="M54 56 Q42 68 36 78 L46 80 Q52 70 60 60 Z" fill="#fdba74" />
+              <!-- الذراع الأمامية -->
+              <path class="limb-arm-front" d="M60 58 Q52 70 50 80 L60 80 Q62 70 68 60 Z" fill="#fed7aa" stroke="#fb923c" stroke-width="2"/>
+
+              <!-- الرأس -->
+              <g class="baby-head-group">
+                <circle cx="38" cy="40" r="22" fill="#fed7aa" stroke="#fb923c" stroke-width="2"/>
+                <path d="M36 18 Q42 10 46 18" fill="none" stroke="#92400e" stroke-width="3" stroke-linecap="round"/>
+                <!-- العيون العادية -->
+                <circle cx="30" cy="38" r="3.2" fill="#1e293b"/>
+                <circle cx="29" cy="37" r="1" fill="#ffffff"/>
+                <!-- خد وردي -->
+                <circle cx="35" cy="45" r="4" fill="rgba(244, 114, 182, 0.45)"/>
+                <!-- ابتسامة -->
+                <path d="M24 46 Q29 52 34 47" fill="none" stroke="#be123c" stroke-width="2.2" stroke-linecap="round"/>
+                <!-- اللهاية -->
+                <circle cx="22" cy="47" r="4.2" fill="#ec4899"/>
+                <circle cx="18" cy="47" r="2.8" fill="none" stroke="#fde047" stroke-width="2"/>
+
+                <!-- نضارة الشمس الكول (تنزل لما يقف يرقص) -->
+                <g class="cool-sunglasses" id="babySunglasses">
+                  <rect x="17" y="32" width="14" height="9" rx="2.5" fill="#090d16" stroke="#38bdf8" stroke-width="1.5"/>
+                  <rect x="33" y="32" width="13" height="9" rx="2.5" fill="#090d16" stroke="#38bdf8" stroke-width="1.5"/>
+                  <line x1="31" y1="35" x2="33" y2="35" stroke="#fde047" stroke-width="2"/>
+                  <line x1="46" y1="35" x2="56" y2="33" stroke="#090d16" stroke-width="2"/>
+                  <!-- لمعة على النضارة -->
+                  <line x1="20" y1="34" x2="23" y2="39" stroke="rgba(255,255,255,0.65)" stroke-width="1.5"/>
+                  <line x1="36" y1="34" x2="39" y2="39" stroke="rgba(255,255,255,0.65)" stroke-width="1.5"/>
+                </g>
+              </g>
+            </svg>
+          </div>
+        </div>
+
+        <!-- كارت المعلومات وبدء اللعب -->
+        <div class="tech-card">
+          <div class="title-row">
+            <h1 class="tech-title">سلة الأم المرضعة</h1>
+            <span class="best-score-badge" id="bestScoreBadge">👑 أعلى سكور: 0</span>
+          </div>
+          <p class="tech-subtitle">
+            كل جيم بيبدأ من 0! اجمعي الأكل الصحي، ارفعي ليفلك لفتح المتجر، واستعدي لوحش البيبي عند سكور 500!
+          </p>
+
+          <div class="legend">
+            <div class="legend-card legend-good">
+              <div class="legend-head">✅ مفيد (+10 نقط)</div>
+              <div>🥛 لبن &nbsp; 🌴 تمر &nbsp; 🥣 شوفان &nbsp; 🐟 سلمون</div>
+              <div>🥬 سبانخ &nbsp; 💧 ميه &nbsp; 🥚 بيض &nbsp; 🥜 مكسرات</div>
+            </div>
+            <div class="legend-card legend-bad">
+              <div class="legend-head">❌ مضر (-5 و -1 ❤️)</div>
+              <div>☕ كافيين &nbsp; 🥤 صودا &nbsp; 🍔 فاست فود</div>
+              <div>🌶️ شطة &nbsp; 🍣 سمك ني &nbsp; 🍬 سكريات</div>
+            </div>
+          </div>
+
+          <button class="btn-tech-start" id="startBtn">
+            <span>ابدأ الجيم الآن</span>
+            <span>🚀</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- نافذة تأكيد الخروج من الجيم -->
+      <section class="overlay confirm-overlay hidden" id="exitConfirmOverlay">
+        <div class="confirm-box">
+          <div style="font-size: 2.5rem; margin-bottom: 6px;">🚪</div>
+          <h2>الخروج من الجيم؟</h2>
+          <p>النقط والكوينز اللي جمعتها اتحفظت خلاص، تحب ترجع للشاشة الرئيسية؟</p>
+          <div class="confirm-btns">
+            <button class="btn-confirm-yes" id="confirmExitYes">نعم، خروج</button>
+            <button class="btn-confirm-no" id="confirmExitNo">كمّل لعب</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- شاشة نهاية الجيم -->
+      <section class="overlay gameover-overlay hidden" id="gameOverOverlay">
+        <div class="gameover-icon">💔</div>
+        <h1 class="gameover-title">انتهت القلوب!</h1>
+        <p>خسرت الـ 5 قلوب في الجيم ده!</p>
+
+        <div class="stats-box" id="gameOverStats">
+          سكور الجيم: 0<br>
+          أعلى سكور: 0
+        </div>
+
+        <div class="gameover-actions">
+          <button class="btn-tech-start" id="restartBtn">جيم جديد 🔄</button>
+          <button class="btn-shop-alt" id="gameOverHomeBtn">الرئيسية والمتجر 🏠</button>
+        </div>
+      </section>
+
+      <!-- شاشة المتجر (تفتح من الرئيسية) -->
+      <section class="overlay shop-overlay hidden" id="shopOverlay">
+        <div class="shop-header">
+          <div>
+            <h2>🛍️ متجر النخبة</h2>
+            <span class="shop-lvl-hint">ليفل حسابك الحالي: <b id="shopLevelDisplay">1</b></span>
+          </div>
+          <div class="shop-header-right">
+            <span class="lobby-coin-pill">🪙 <span id="shopCoinsDisplay">0</span></span>
+            <button class="hud-btn btn-exit" id="closeShopBtn">✖</button>
+          </div>
+        </div>
+
+        <p class="shop-note">
+          كل <b>20 نقطة</b> = <b>1 كوين</b> • بعض المنتجات مقفولة لحد ما توصل لليفل المطلوب 🔒
+        </p>
+
+        <div class="shop-tabs">
+          <button class="tab-btn active" id="tabThemes">🎨 خلفيات اللعب</button>
+          <button class="tab-btn" id="tabBaskets">🧺 أشكال السلة</button>
+        </div>
+
+        <div class="shop-grid" id="shopGrid"></div>
+      </section>
+    </main>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>
