@@ -153,12 +153,12 @@ const BASKETS = [
 ];
 
 // =========================================================
-// حفظ البيانات على الجهاز (الخبرة التراكمية + الكوينز + أعلى سكور)
+// حفظ البيانات على الجهاز
 // =========================================================
 const STATE_KEY = 'nursing_mom_game_state_v5';
 let savedData = {
-  totalXP: 0,      // النقط التراكمية اللي بترفع الليفل اللانهائي
-  bestScore: 0,    // أعلى سكور اتحقق في جيم واحد
+  totalXP: 0,
+  bestScore: 0,
   coins: 0,
   coinBuffer: 0,
   unlockedThemes: ['morning'],
@@ -171,20 +171,6 @@ try {
   const raw = localStorage.getItem(STATE_KEY);
   if (raw) {
     savedData = { ...savedData, ...JSON.parse(raw) };
-  } else {
-    // نقل بيانات النسخة القديمة لو موجودة
-    const oldRaw = localStorage.getItem('nursing_mom_game_state_v4') || localStorage.getItem('nursing_mom_game_state_v3');
-    if (oldRaw) {
-      const oldParsed = JSON.parse(oldRaw);
-      savedData.totalXP = oldParsed.score || 0;
-      savedData.bestScore = oldParsed.score || 0;
-      savedData.coins = oldParsed.coins || 0;
-      savedData.coinBuffer = oldParsed.coinBuffer || 0;
-      savedData.unlockedThemes = oldParsed.unlockedThemes || ['morning'];
-      savedData.unlockedBaskets = oldParsed.unlockedBaskets || ['classic'];
-      savedData.equippedTheme = oldParsed.equippedTheme || 'morning';
-      savedData.equippedBasket = oldParsed.equippedBasket || 'classic';
-    }
   }
 } catch (e) {}
 
@@ -195,14 +181,12 @@ function persistState() {
 }
 
 // =========================================================
-// نظام الليفلات اللانهائي فائق الصعوبة (Infinite Exponential)
+// نظام الليفلات اللانهائي فائق الصعوبة
 // =========================================================
 function getInfiniteLevelInfo(totalXP) {
   let lvl = 1;
   let remainingXP = Math.max(0, totalXP);
 
-  // كل ليفل بيحتاج نقط أكتر بشكل تربيعي (ملوش نهاية)
-  // ليفل 1->2: 1200 | ليفل 2->3: 3200 | ليفل 3->4: 6000 | ليفل 4->5: 9600 ...
   while (true) {
     const neededForNext = 800 * lvl + 400 * (lvl * lvl);
     if (remainingXP >= neededForNext) {
@@ -224,18 +208,15 @@ function updateAllUI() {
   const lvlInfo = getInfiniteLevelInfo(savedData.totalXP);
   currentAccountLevel = lvlInfo.lvl;
 
-  // تحديث الشاشة الرئيسية
   mainLevelDisplay.textContent = currentAccountLevel;
   mainXpText.textContent = `${lvlInfo.currentInLvl} / ${lvlInfo.neededForNext} XP`;
   mainXpFill.style.width = `${lvlInfo.pct}%`;
   mainCoinsDisplay.textContent = savedData.coins;
   bestScoreBadge.textContent = `👑 أعلى سكور: ${savedData.bestScore}`;
 
-  // تحديث المتجر
   document.getElementById('shopLevelDisplay').textContent = currentAccountLevel;
   document.getElementById('shopCoinsDisplay').textContent = savedData.coins;
 
-  // تحديث شريط الجيم
   gameScoreDisplay.textContent = currentGameScore;
   hudCoinsDisplay.textContent = savedData.coins;
 
@@ -248,18 +229,54 @@ function updateAllUI() {
 updateAllUI();
 
 // =========================================================
-// محرك الصوت والموسيقى (Web Audio API)
+// محرك الصوت والموسيقى (مع فك القفل الفوري على الموبايل)
 // =========================================================
 let soundEnabled = true;
 const AudioCtx = window.AudioContext || window.webkitAudioContext;
 let audioCtx = null;
+let audioUnlocked = false;
 
-function ensureAudio() {
+function getAudioContext() {
   if (!soundEnabled) return null;
-  if (!audioCtx) audioCtx = new AudioCtx();
-  if (audioCtx.state === 'suspended') audioCtx.resume();
+  if (!audioCtx && AudioCtx) {
+    audioCtx = new AudioCtx();
+  }
   return audioCtx;
 }
+
+function unlockBrowserAudio() {
+  if (!soundEnabled) return;
+  const ctxAudio = getAudioContext();
+  if (!ctxAudio) return;
+
+  // تشغيل نبضة صامتة لفك قفل الصوت في متصفحات الموبايل
+  if (!audioUnlocked) {
+    try {
+      const buffer = ctxAudio.createBuffer(1, 1, 22050);
+      const source = ctxAudio.createBufferSource();
+      source.buffer = buffer;
+      source.connect(ctxAudio.destination);
+      source.start(0);
+      audioUnlocked = true;
+    } catch (e) {}
+  }
+
+  if (ctxAudio.state === 'suspended') {
+    ctxAudio.resume().then(() => {
+      if (soundEnabled && isBabyDancing && !startOverlay.classList.contains('hidden') && !danceMusicInterval) {
+        startBabyDanceMusic();
+      }
+    }).catch(() => {});
+  } else if (ctxAudio.state === 'running') {
+    if (soundEnabled && isBabyDancing && !startOverlay.classList.contains('hidden') && !danceMusicInterval) {
+      startBabyDanceMusic();
+    }
+  }
+}
+
+['touchstart', 'pointerdown', 'mousedown', 'keydown'].forEach(evt => {
+  document.addEventListener(evt, unlockBrowserAudio, { passive: true });
+});
 
 // 1. مزيكا رقص البيبي في الشاشة الرئيسية
 let danceMusicInterval = null;
@@ -267,10 +284,13 @@ let isBabyDancing = false;
 
 function startBabyDanceMusic() {
   if (!soundEnabled || danceMusicInterval || !isBabyDancing) return;
-  const ctxAudio = ensureAudio();
+  const ctxAudio = getAudioContext();
   if (!ctxAudio) return;
 
-  // نغمات إيقاعية مبهجة للبيبي وهو لابس النضارة وبيرقص
+  if (ctxAudio.state === 'suspended') {
+    ctxAudio.resume().catch(() => {});
+  }
+
   const melody = [523.25, 659.25, 783.99, 659.25, 880.00, 783.99, 659.25, 587.33];
   const bass = [130.81, 130.81, 164.81, 164.81, 174.61, 174.61, 196.00, 196.00];
   let step = 0;
@@ -280,30 +300,35 @@ function startBabyDanceMusic() {
       stopBabyDanceMusic();
       return;
     }
-    const c = ensureAudio();
-    if (!c || c.state !== 'running') return;
+    const c = getAudioContext();
+    if (!c) return;
+    if (c.state === 'suspended') {
+      c.resume().catch(() => {});
+      return;
+    }
+
     const now = c.currentTime;
 
-    // نغمة اللحن
+    // نغمة اللحن الرئيسي (واضحة ومبهجة)
     const osc = c.createOscillator();
     const gain = c.createGain();
     osc.type = 'triangle';
     osc.frequency.setValueAtTime(melody[step % melody.length], now);
-    gain.gain.setValueAtTime(0.08, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+    gain.gain.setValueAtTime(0.16, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.19);
     osc.connect(gain);
     gain.connect(c.destination);
     osc.start(now);
-    osc.stop(now + 0.19);
+    osc.stop(now + 0.2);
 
-    // بيز خفيف كل خطوتين
+    // بيز إيقاعي
     if (step % 2 === 0) {
       const bOsc = c.createOscillator();
       const bGain = c.createGain();
       bOsc.type = 'sine';
       bOsc.frequency.setValueAtTime(bass[step % bass.length], now);
       bOsc.frequency.exponentialRampToValueAtTime(55, now + 0.22);
-      bGain.gain.setValueAtTime(0.14, now);
+      bGain.gain.setValueAtTime(0.22, now);
       bGain.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
       bOsc.connect(bGain);
       bGain.connect(c.destination);
@@ -325,41 +350,50 @@ function stopBabyDanceMusic() {
   }
 }
 
-// 2. لحن Baby Shark عند ظهور الوحش + تلاشي تدريجي (Fade Out)
+// 2. موسيقى دخول الوحوش (Baby Shark للوحش الأول + Funky Beat للوحش التاني) + تلاشي تدريجي
 let bossMusicMasterGain = null;
 
-function playBabySharkEntrance() {
-  const ctxAudio = ensureAudio();
+function playBossEntranceMusic(bossType) {
+  const ctxAudio = getAudioContext();
   if (!ctxAudio) return;
+  if (ctxAudio.state === 'suspended') ctxAudio.resume().catch(() => {});
 
-  stopBabySharkMusic();
+  stopBossMusic();
 
   const master = ctxAudio.createGain();
-  master.gain.setValueAtTime(0.22, ctxAudio.currentTime);
+  master.gain.setValueAtTime(0.26, ctxAudio.currentTime);
   master.connect(ctxAudio.destination);
   bossMusicMasterGain = master;
 
-  // لحن Baby Shark: D4, E4, G4, G4, G4, G4, G4, G4, G4 (مرتين)
-  const D4 = 293.66, E4 = 329.63, G4 = 392.00, Fs4 = 369.99;
-  const pattern = [
-    { f: D4, d: 0.32 }, { f: E4, d: 0.32 },
-    { f: G4, d: 0.18 }, { f: G4, d: 0.18 }, { f: G4, d: 0.18 },
-    { f: G4, d: 0.14 }, { f: G4, d: 0.18 }, { f: G4, d: 0.14 }, { f: G4, d: 0.24 },
+  let pattern = [];
+  if (bossType === 1) {
+    // لحن Baby Shark للوحش الأول (500 سكور)
+    const D4 = 293.66, E4 = 329.63, G4 = 392.00, Fs4 = 369.99;
+    pattern = [
+      { f: D4, d: 0.30, w: 'triangle' }, { f: E4, d: 0.30, w: 'triangle' },
+      { f: G4, d: 0.17, w: 'triangle' }, { f: G4, d: 0.17, w: 'triangle' }, { f: G4, d: 0.17, w: 'triangle' },
+      { f: G4, d: 0.13, w: 'triangle' }, { f: G4, d: 0.17, w: 'triangle' }, { f: G4, d: 0.13, w: 'triangle' }, { f: G4, d: 0.22, w: 'triangle' },
 
-    { f: D4, d: 0.32 }, { f: E4, d: 0.32 },
-    { f: G4, d: 0.18 }, { f: G4, d: 0.18 }, { f: G4, d: 0.18 },
-    { f: G4, d: 0.14 }, { f: G4, d: 0.18 }, { f: G4, d: 0.14 }, { f: G4, d: 0.24 },
+      { f: D4, d: 0.30, w: 'triangle' }, { f: E4, d: 0.30, w: 'triangle' },
+      { f: G4, d: 0.17, w: 'triangle' }, { f: G4, d: 0.17, w: 'triangle' }, { f: G4, d: 0.17, w: 'triangle' },
+      { f: G4, d: 0.13, w: 'triangle' }, { f: G4, d: 0.17, w: 'triangle' }, { f: G4, d: 0.13, w: 'triangle' }, { f: Fs4, d: 0.42, w: 'triangle' }
+    ];
+  } else {
+    // لحن رقص فانكي كول للوحش التاني أبو نضارة (1000 سكور)
+    const E3 = 164.81, G3 = 196.00, A3 = 220.00, B3 = 246.94, D4 = 293.66, E4 = 329.63;
+    pattern = [
+      { f: E3, d: 0.20, w: 'sawtooth' }, { f: E4, d: 0.16, w: 'square' }, { f: D4, d: 0.16, w: 'square' }, { f: B3, d: 0.20, w: 'sawtooth' },
+      { f: A3, d: 0.20, w: 'sawtooth' }, { f: G3, d: 0.18, w: 'sawtooth' }, { f: A3, d: 0.18, w: 'square' }, { f: B3, d: 0.28, w: 'square' },
+      { f: E3, d: 0.20, w: 'sawtooth' }, { f: E4, d: 0.16, w: 'square' }, { f: D4, d: 0.16, w: 'square' }, { f: B3, d: 0.20, w: 'sawtooth' },
+      { f: D4, d: 0.18, w: 'square' }, { f: E4, d: 0.22, w: 'square' }, { f: G3, d: 0.18, w: 'sawtooth' }, { f: E3, d: 0.42, w: 'sawtooth' }
+    ];
+  }
 
-    { f: D4, d: 0.30 }, { f: E4, d: 0.30 },
-    { f: G4, d: 0.18 }, { f: G4, d: 0.18 }, { f: G4, d: 0.18 },
-    { f: G4, d: 0.14 }, { f: G4, d: 0.18 }, { f: G4, d: 0.14 }, { f: Fs4, d: 0.45 }
-  ];
-
-  let t = ctxAudio.currentTime + 0.05;
+  let t = ctxAudio.currentTime + 0.04;
   pattern.forEach(note => {
     const osc = ctxAudio.createOscillator();
     const noteGain = ctxAudio.createGain();
-    osc.type = 'triangle';
+    osc.type = note.w;
     osc.frequency.setValueAtTime(note.f, t);
 
     noteGain.gain.setValueAtTime(0.001, t);
@@ -375,19 +409,18 @@ function playBabySharkEntrance() {
   });
 }
 
-function fadeOutBabySharkMusic() {
+function fadeOutBossMusic() {
   if (!audioCtx || !bossMusicMasterGain) return;
   const now = audioCtx.currentTime;
   bossMusicMasterGain.gain.cancelScheduledValues(now);
-  bossMusicMasterGain.gain.setValueAtTime(bossMusicMasterGain.gain.value, now);
-  // تلاشي تدريجي ناعم خلال 1.8 ثانية أول ما الفايت يبدأ
+  bossMusicMasterGain.gain.setValueAtTime(Math.max(0.01, bossMusicMasterGain.gain.value), now);
   bossMusicMasterGain.gain.exponentialRampToValueAtTime(0.0001, now + 1.8);
   setTimeout(() => {
-    stopBabySharkMusic();
+    stopBossMusic();
   }, 1900);
 }
 
-function stopBabySharkMusic() {
+function stopBossMusic() {
   if (bossMusicMasterGain) {
     try { bossMusicMasterGain.disconnect(); } catch (e) {}
     bossMusicMasterGain = null;
@@ -419,7 +452,7 @@ function synthesizeBabyWaaah(ctxAudio, startTime, duration = 0.42) {
   filter.frequency.exponentialRampToValueAtTime(620, startTime + duration);
 
   gain.gain.setValueAtTime(0.001, startTime);
-  gain.gain.linearRampToValueAtTime(0.22, startTime + 0.06);
+  gain.gain.linearRampToValueAtTime(0.24, startTime + 0.06);
   gain.gain.setValueAtTime(0.18, startTime + duration * 0.7);
   gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
 
@@ -445,7 +478,7 @@ function synthesizeBabyGiggle(ctxAudio, now) {
     osc.frequency.exponentialRampToValueAtTime(freq * 1.18, t + 0.05);
 
     gain.gain.setValueAtTime(0.001, t);
-    gain.gain.linearRampToValueAtTime(0.13, t + 0.015);
+    gain.gain.linearRampToValueAtTime(0.15, t + 0.015);
     gain.gain.exponentialRampToValueAtTime(0.001, t + 0.055);
 
     osc.connect(gain);
@@ -456,8 +489,9 @@ function synthesizeBabyGiggle(ctxAudio, now) {
 }
 
 function playTone(type) {
-  const ctxAudio = ensureAudio();
+  const ctxAudio = getAudioContext();
   if (!ctxAudio) return;
+  if (ctxAudio.state === 'suspended') ctxAudio.resume().catch(() => {});
   const now = ctxAudio.currentTime;
 
   if (type === 'good') {
@@ -477,7 +511,7 @@ function playTone(type) {
 }
 
 // =========================================================
-// أنيميشن البيبي في الشاشة الرئيسية (يزحف للنص -> يلبس نضارة -> يرقص بمزيكا)
+// أنيميشن البيبي في الشاشة الرئيسية
 // =========================================================
 let babyChoreoTimer = null;
 
@@ -489,14 +523,12 @@ function startLobbyBabyAnimation() {
   babyStage.classList.remove('dancing');
   babyActor.className = 'baby-actor crawling';
 
-  // بدء حركة الزحف لنص الشاشة بعد لحظة قصيرة
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
       babyActor.classList.add('at-center');
     });
   });
 
-  // بعد 2.4 ثانية (لما يوصل في نص الشاشة): يقف + يلبس النضارة + يرقص + يشغل المزيكا
   babyChoreoTimer = setTimeout(() => {
     babyActor.classList.remove('crawling');
     babyActor.classList.add('dancing');
@@ -506,33 +538,23 @@ function startLobbyBabyAnimation() {
   }, 2400);
 }
 
-// فك قفل الصوت في المتصفح عند أول لمسة على الشاشة الرئيسية عشان مزيكا الرقص تشتغل
-startOverlay.addEventListener('pointerdown', () => {
-  if (soundEnabled) {
-    ensureAudio();
-    if (isBabyDancing && !danceMusicInterval) {
-      startBabyDanceMusic();
-    }
-  }
-});
-
 lobbyMusicBtn.addEventListener('click', (e) => {
   e.stopPropagation();
   soundEnabled = !soundEnabled;
   lobbyMusicBtn.textContent = soundEnabled ? '🎵' : '🔇';
   document.getElementById('soundBtn').textContent = soundEnabled ? '🔊' : '🔇';
-  if (soundEnabled && isBabyDancing) {
-    startBabyDanceMusic();
+  if (soundEnabled) {
+    unlockBrowserAudio();
+    if (isBabyDancing) startBabyDanceMusic();
   } else {
     stopBabyDanceMusic();
   }
 });
 
-// تشغيل الأنيميشن أول ما الصفحة تفتح
 startLobbyBabyAnimation();
 
 // =========================================================
-// الأكلات والوحش والسلة
+// الأكلات (حجم أكبر وأوضح) والوحوش والسلة
 // =========================================================
 const GOOD_FOODS = [
   { emoji: '🥛', name: 'حليب', good: true, tip: 'كالسيوم أساسي للأم والرضيع!' },
@@ -559,26 +581,38 @@ const basket = {
   y: 420,
   targetX: 160,
   targetY: 420,
-  width: 68,
-  height: 46,
+  width: 72,
+  height: 48,
   vx: 0,
   tilt: 0
 };
 
+// كائن الوحش (يدعم الوحش 1 عند 500 والوحش 2 الراقص أبو نضارة عند 1000)
 const boss = {
+  type: 1, // 1 = البيبي القرش | 2 = البيبي الراقص أبو نضارة
   state: 'idle',
   x: 200,
-  y: -120,
-  radius: 68,
+  y: -130,
+  targetX: 200,
+  targetY: 120,
+  moveLerp: 4,
+  moveTimer: 0,
+  dancePhase: 0,
+  handSide: 1,
+  handSwing: 0,
+  radius: 70,
   dir: 1,
   timer: 0,
   throwTimer: 0,
+  burstRemaining: 0,
+  burstPattern: 'curve',
   wavesThrown: 0,
   maxWaves: 24,
   scale: 1
 };
 
-let nextBossGameScore = 500; // الوحش بيظهر عند 500 سكور في الجيم!
+let nextBossGameScore = 500;
+let bossEncountersCount = 0;
 
 let isRunning = false;
 let isPaused = false;
@@ -699,8 +733,9 @@ function setTipUI(mode, icon, message) {
 // إدارة بدء الجيم والخروج للشاشة الرئيسية
 // =========================================================
 function startNewRun() {
+  unlockBrowserAudio();
   stopBabyDanceMusic();
-  stopBabySharkMusic();
+  stopBossMusic();
 
   startOverlay.classList.add('hidden');
   gameOverOverlay.classList.add('hidden');
@@ -711,7 +746,6 @@ function startNewRun() {
   gameHud.classList.remove('hidden');
   tipBar.classList.remove('hidden');
 
-  // كل جيم بيبدأ من 0!
   currentGameScore = 0;
   heartsRemaining = MAX_HEARTS;
   elapsedSeconds = 0;
@@ -725,9 +759,12 @@ function startNewRun() {
   popups = [];
 
   boss.state = 'idle';
+  boss.type = 1;
   boss.y = -130;
   boss.wavesThrown = 0;
-  nextBossGameScore = 500; // الوحش عند 500 سكور في الجيم
+  boss.burstRemaining = 0;
+  nextBossGameScore = 500;
+  bossEncountersCount = 0;
 
   resizeCanvas();
   basket.targetX = (canvas.width - basket.width) / 2;
@@ -737,7 +774,7 @@ function startNewRun() {
   basket.y = basket.targetY;
 
   timerDisplay.textContent = '00:00';
-  setTipUI('', '🤱', 'حركي السلة في كل الاتجاهات! الوحش هيظهر عند 500 نقطة');
+  setTipUI('', '🤱', 'حركي السلة في كل الاتجاهات! الوحش الأول عند 500 والتاني عند 1000');
   updateAllUI();
 
   isRunning = true;
@@ -750,7 +787,7 @@ function startNewRun() {
 function returnToLobby() {
   isRunning = false;
   isPaused = false;
-  stopBabySharkMusic();
+  stopBossMusic();
 
   gameHud.classList.add('hidden');
   tipBar.classList.add('hidden');
@@ -768,7 +805,6 @@ document.getElementById('startBtn').addEventListener('click', startNewRun);
 document.getElementById('restartBtn').addEventListener('click', startNewRun);
 document.getElementById('gameOverHomeBtn').addEventListener('click', returnToLobby);
 
-// زرار الخروج من الجيم + نافذة التأكيد
 document.getElementById('exitGameBtn').addEventListener('click', () => {
   if (!isRunning) return;
   isPaused = true;
@@ -799,7 +835,11 @@ document.getElementById('soundBtn').addEventListener('click', (e) => {
   soundEnabled = !soundEnabled;
   e.target.textContent = soundEnabled ? '🔊' : '🔇';
   lobbyMusicBtn.textContent = soundEnabled ? '🎵' : '🔇';
-  if (!soundEnabled) stopBabySharkMusic();
+  if (soundEnabled) {
+    unlockBrowserAudio();
+  } else {
+    stopBossMusic();
+  }
 });
 
 let levelToastTimer = null;
@@ -815,7 +855,7 @@ function triggerLevelUp(newLvl) {
 
 function triggerGameOver() {
   isRunning = false;
-  stopBabySharkMusic();
+  stopBossMusic();
   bossBanner.classList.add('hidden');
   tipBar.classList.add('hidden');
   playTone('gameover');
@@ -830,7 +870,7 @@ function triggerGameOver() {
 }
 
 // =========================================================
-// المتجر (من الشاشة الرئيسية فقط + قفل الليفلات)
+// المتجر
 // =========================================================
 let currentShopTab = 'themes';
 
@@ -937,7 +977,7 @@ function renderShop() {
 }
 
 // =========================================================
-// منطق اللعب والوحش (عند 500 سكور + Baby Shark)
+// منطق اللعب والوحوش (الوحش 1 عند 500 + الوحش 2 أبو نضارة عند 1000)
 // =========================================================
 let tipTimeout = null;
 function showTip(item) {
@@ -962,8 +1002,8 @@ function addPopup(x, y, text, color) {
 function spawnTopFood() {
   const pool = Math.random() < 0.56 ? GOOD_FOODS : BAD_FOODS;
   const template = pool[Math.floor(Math.random() * pool.length)];
-  const radius = 23;
-  const padding = 30;
+  const radius = 31; // تكبير حجم الأكلات
+  const padding = 38;
   const x = padding + Math.random() * Math.max(20, canvas.width - padding * 2);
 
   const timeBoost = elapsedSeconds * 3.8;
@@ -973,9 +1013,10 @@ function spawnTopFood() {
   items.push({
     ...template,
     x,
-    y: -30,
+    y: -38,
     vx: 0,
     vy: speed,
+    ax: 0,
     radius,
     isSide: false
   });
@@ -996,30 +1037,108 @@ function launchSideFood(fromLeft, startY) {
   const speedX = (230 + Math.min(180, elapsedSeconds * 2.5)) * (fromLeft ? 1 : -1);
   items.push({
     ...template,
-    x: fromLeft ? -24 : canvas.width + 24,
+    x: fromLeft ? -32 : canvas.width + 32,
     y: startY,
     vx: speedX,
     vy: 45 + Math.random() * 45,
-    radius: 22,
+    ax: 0,
+    radius: 30, // تكبير حجم الأكلات الجانبية
     isSide: true
   });
 }
 
 function startBossSequence() {
+  bossEncountersCount++;
+  if (bossEncountersCount === 1) {
+    boss.type = 1; // الوحش الأول عند 500
+    nextBossGameScore = 1000;
+  } else if (bossEncountersCount === 2) {
+    boss.type = 2; // الوحش التاني أبو نضارة عند 1000
+    nextBossGameScore = currentGameScore + 1200;
+  } else {
+    boss.type = (bossEncountersCount % 2 === 1) ? 1 : 2;
+    nextBossGameScore = currentGameScore + 1200;
+  }
+
   boss.state = 'warning';
-  boss.timer = 3.2; // وقت دخول الوحش على لحن Baby Shark
+  boss.timer = 3.2;
   boss.x = canvas.width / 2;
-  boss.y = -120;
+  boss.y = -130;
+  boss.targetX = canvas.width / 2;
+  boss.targetY = 125;
+  boss.moveTimer = 0.5;
+  boss.dancePhase = 0;
+  boss.handSide = 1;
+  boss.handSwing = 0;
   boss.wavesThrown = 0;
-  boss.maxWaves = 22 + Math.floor(currentGameScore / 500) * 3;
+  boss.burstRemaining = 0;
+  boss.maxWaves = boss.type === 1 ? 22 : 28;
   boss.scale = 1;
   screenShake = 11;
 
   items = [];
   sideWarnings = [];
   bossBanner.classList.remove('hidden');
-  setTipUI('tip-boss', '🦈', 'بيبي شارك دو دو دو! استعد لتفادي هجمات البيبي المشاغب!');
-  playBabySharkEntrance();
+
+  if (boss.type === 1) {
+    bossBanner.textContent = '🦈⚠️ تحذير! البيبي القرش المشاغب قادم ⚠️🦈';
+    setTipUI('tip-boss', '🦈', 'بيبي شارك دو دو دو! استعد لتفادي هجماته!');
+  } else {
+    bossBanner.textContent = '🕶️🕺 تحذير! البيبي الراقص أبو نضارة دخل الساحة 🕺🕶️';
+    setTipUI('tip-boss', '🕶️', 'احذر! بيرقص بحركات عشوائية وبيرمي الأكل الضار بكرف ومستقيم ورا بعض!');
+  }
+
+  playBossEntranceMusic(boss.type);
+}
+
+// رمية من إيد الوحش التاني (مستقيم أو كرف)
+function throwBoss2HandProjectile(pattern) {
+  const badTemplate = BAD_FOODS[Math.floor(Math.random() * BAD_FOODS.length)];
+  const basketCenterX = basket.x + basket.width / 2;
+  const basketCenterY = basket.y + basket.height / 2;
+
+  // تبديل الإيد اللي بيرمي بيها وتحريكها
+  boss.handSide = basketCenterX >= boss.x ? 1 : -1;
+  boss.handSwing = 1.0;
+
+  const handX = boss.x + boss.handSide * 52;
+  const handY = boss.y + 12;
+
+  const dy = Math.max(150, basketCenterY - handY);
+  const flightTime = Math.max(0.75, Math.min(1.25, dy / 350));
+
+  let vx = 0;
+  let vy = dy / flightTime;
+  let ax = 0;
+
+  if (pattern === 'curve') {
+    // رمية بكرف واضح (انحناء أفقي قوي في الهوا)
+    const curveDir = (handX > canvas.width / 2) ? -1 : 1;
+    const curveStrength = (260 + Math.random() * 140) * curveDir;
+    ax = curveStrength;
+    // حساب السرعة الابتدائية بحيث الكرف يلف ويوصل ناحية السلة
+    vx = ((basketCenterX - handX) / flightTime) - 0.5 * ax * flightTime;
+  } else {
+    // رمية مستقيمة سريعة نحو السلة
+    const dx = (basketCenterX + (Math.random() * 50 - 25)) - handX;
+    const dist = Math.hypot(dx, dy) || 1;
+    const speed = 385;
+    vx = (dx / dist) * speed;
+    vy = Math.max(270, (dy / dist) * speed);
+    ax = 0;
+  }
+
+  items.push({
+    ...badTemplate,
+    x: handX,
+    y: handY,
+    vx,
+    vy,
+    ax,
+    radius: 28,
+    isBossShot: true,
+    isCurved: pattern === 'curve'
+  });
 }
 
 function updateBoss(dt) {
@@ -1031,64 +1150,121 @@ function updateBoss(dt) {
     if (boss.timer <= 0) {
       boss.state = 'fighting';
       bossBanner.classList.add('hidden');
-      setTipUI('tip-boss', '😈', 'الفايت بدأ! اهرب بالسلة في كل الاتجاهات!');
-      // تلاشي أغنية Baby Shark بالتدريج أول ما الفايت يبدأ
-      fadeOutBabySharkMusic();
+      if (boss.type === 1) {
+        setTipUI('tip-boss', '😈', 'الفايت بدأ! اهرب بالسلة في كل الاتجاهات!');
+      } else {
+        setTipUI('tip-boss', '🕺', 'البيبي أبو نضارة بيرقص ويرمي بإيده! ركز في الكرف!');
+      }
+      fadeOutBossMusic();
     }
     return;
   }
 
   if (boss.state === 'fighting') {
-    const targetY = 120;
-    boss.y += (targetY - boss.y) * Math.min(1, 4 * dt);
+    if (boss.type === 1) {
+      // === سلوك الوحش الأول (البيبي القرش عند 500) ===
+      const targetY = 120;
+      boss.y += (targetY - boss.y) * Math.min(1, 4 * dt);
 
-    const moveSpeed = 140 + Math.floor(currentGameScore / 500) * 14;
-    boss.x += boss.dir * moveSpeed * dt;
-    if (boss.x > canvas.width - 75) {
-      boss.x = canvas.width - 75;
-      boss.dir = -1;
-    } else if (boss.x < 75) {
-      boss.x = 75;
-      boss.dir = 1;
+      const moveSpeed = 145;
+      boss.x += boss.dir * moveSpeed * dt;
+      if (boss.x > canvas.width - 75) {
+        boss.x = canvas.width - 75;
+        boss.dir = -1;
+      } else if (boss.x < 75) {
+        boss.x = 75;
+        boss.dir = 1;
+      }
+
+      boss.throwTimer += dt;
+      if (boss.throwTimer >= 0.56 && boss.wavesThrown < boss.maxWaves) {
+        boss.throwTimer = 0;
+        boss.wavesThrown++;
+
+        const badTemplate = BAD_FOODS[Math.floor(Math.random() * BAD_FOODS.length)];
+        const targetBasketX = basket.x + basket.width / 2 + (Math.random() * 85 - 42);
+        const targetBasketY = basket.y + basket.height / 2;
+        const dx = targetBasketX - boss.x;
+        const dy = Math.max(120, targetBasketY - boss.y);
+        const dist = Math.hypot(dx, dy) || 1;
+        const projectileSpeed = 330;
+
+        items.push({
+          ...badTemplate,
+          x: boss.x,
+          y: boss.y + 30,
+          vx: (dx / dist) * projectileSpeed * 0.72,
+          vy: Math.max(245, (dy / dist) * projectileSpeed),
+          ax: 0,
+          radius: 28,
+          isBossShot: true
+        });
+      }
+    } else {
+      // === سلوك الوحش التاني (البيبي الراقص أبو نضارة عند 1000) ===
+      boss.dancePhase += dt * 12;
+      boss.handSwing = Math.max(0, boss.handSwing - dt * 4);
+
+      // حركات رقص مفاجئة وغير متوقعة في الجزء العلوي
+      boss.moveTimer -= dt;
+      if (boss.moveTimer <= 0) {
+        boss.moveTimer = 0.35 + Math.random() * 0.75; // تغيير مفاجئ كل 0.35 إلى 1.1 ثانية
+        boss.targetX = 72 + Math.random() * Math.max(40, canvas.width - 144);
+        boss.targetY = 90 + Math.random() * Math.min(135, canvas.height * 0.22);
+        boss.moveLerp = 3.5 + Math.random() * 6.5; // سرعة حركة متغيرة (ساعات هادية وساعات داش سريع!)
+      }
+
+      boss.x += (boss.targetX - boss.x) * Math.min(1, boss.moveLerp * dt);
+      boss.y += (boss.targetY - boss.y) * Math.min(1, boss.moveLerp * dt);
+
+      // نظام الرمي بالإيد: كرف + مستقيم + ورا بعض
+      if (boss.wavesThrown < boss.maxWaves) {
+        if (boss.burstRemaining > 0) {
+          boss.throwTimer -= dt;
+          if (boss.throwTimer <= 0) {
+            boss.burstRemaining--;
+            boss.wavesThrown++;
+            const pat = (boss.burstRemaining % 2 === 0) ? 'straight' : 'curve';
+            throwBoss2HandProjectile(pat);
+            boss.throwTimer = 0.17; // رميات سريعة ورا بعض!
+          }
+        } else {
+          boss.throwTimer += dt;
+          if (boss.throwTimer >= 0.78) {
+            boss.throwTimer = 0;
+            const roll = Math.random();
+            if (roll < 0.42) {
+              // هجمة ورا بعض (3 رميات متتالية)
+              boss.burstRemaining = Math.min(3, boss.maxWaves - boss.wavesThrown);
+              boss.throwTimer = 0.01;
+            } else if (roll < 0.74) {
+              // رمية بكرف
+              boss.wavesThrown++;
+              throwBoss2HandProjectile('curve');
+            } else {
+              // رمية مستقيمة
+              boss.wavesThrown++;
+              throwBoss2HandProjectile('straight');
+            }
+          }
+        }
+      }
     }
 
-    boss.throwTimer += dt;
-    const throwInterval = Math.max(0.35, 0.6 - Math.floor(currentGameScore / 500) * 0.03);
-    if (boss.throwTimer >= throwInterval && boss.wavesThrown < boss.maxWaves) {
-      boss.throwTimer = 0;
-      boss.wavesThrown++;
-
-      const badTemplate = BAD_FOODS[Math.floor(Math.random() * BAD_FOODS.length)];
-      const targetBasketX = basket.x + basket.width / 2 + (Math.random() * 90 - 45);
-      const targetBasketY = basket.y + basket.height / 2;
-      const dx = targetBasketX - boss.x;
-      const dy = Math.max(120, targetBasketY - boss.y);
-      const dist = Math.hypot(dx, dy) || 1;
-      const projectileSpeed = 320 + Math.floor(currentGameScore / 500) * 20;
-
-      items.push({
-        ...badTemplate,
-        x: boss.x,
-        y: boss.y + 30,
-        vx: (dx / dist) * projectileSpeed * 0.72,
-        vy: Math.max(240, (dy / dist) * projectileSpeed),
-        radius: 21,
-        isBossShot: true
-      });
-    }
-
+    // التحقق من هزيمة الوحش
     if (boss.wavesThrown >= boss.maxWaves && items.length === 0) {
       boss.state = 'defeated';
       boss.timer = 2.6;
       playTone('boss_cry');
-      setTipUI('tip-good', '😭', 'واء! البيبي عيّط وهرب! عاش يا بطل (+150 نقطة مكافأة)!');
 
-      // مكافأة النجاة
-      currentGameScore += 150;
-      savedData.totalXP += 150;
+      const bonus = boss.type === 1 ? 150 : 250;
+      setTipUI('tip-good', '😭', `واء! البيبي عيّط وهرب! عاش يا بطل (+${bonus} نقطة مكافأة)!`);
+
+      currentGameScore += bonus;
+      savedData.totalXP += bonus;
       if (currentGameScore > savedData.bestScore) savedData.bestScore = currentGameScore;
 
-      savedData.coinBuffer += 150;
+      savedData.coinBuffer += bonus;
       const earned = Math.floor(savedData.coinBuffer / 20);
       savedData.coins += earned;
       savedData.coinBuffer %= 20;
@@ -1097,8 +1273,10 @@ function updateBoss(dt) {
       const newLvl = getInfiniteLevelInfo(savedData.totalXP).lvl;
       if (newLvl > prevLvl) triggerLevelUp(newLvl);
 
-      addPopup(canvas.width / 2, canvas.height / 2, '+150 نقطة نجاة! 🎉', '#22c55e');
-      nextBossGameScore = currentGameScore + 1000;
+      addPopup(canvas.width / 2, canvas.height / 2, `+${bonus} نقطة نجاة! 🎉`, '#22c55e');
+      if (currentGameScore >= nextBossGameScore) {
+        nextBossGameScore = currentGameScore + 1200;
+      }
       persistState();
       updateAllUI();
     }
@@ -1121,42 +1299,108 @@ function drawBoss(now) {
 
   ctx.save();
   ctx.translate(boss.x, boss.y);
-  ctx.scale(boss.scale, boss.scale);
 
-  const auraRadius = boss.radius + 14 + Math.sin(now * 0.01) * 5;
+  if (boss.type === 2 && boss.state === 'fighting') {
+    // أنيميشن الرقص للوحش التاني (تمدد وانكماش وميلان على الإيقاع)
+    const squashX = 1 + Math.sin(boss.dancePhase) * 0.09;
+    const squashY = 1 - Math.sin(boss.dancePhase) * 0.09;
+    ctx.scale(boss.scale * squashX, boss.scale * squashY);
+    ctx.rotate(Math.sin(boss.dancePhase * 0.5) * 0.16);
+  } else {
+    ctx.scale(boss.scale, boss.scale);
+    ctx.rotate(Math.sin(now * 0.015) * 0.08);
+  }
+
+  // هالة طاقة حول الوحش
+  const auraRadius = boss.radius + 16 + Math.sin(now * 0.012) * 6;
   const aura = ctx.createRadialGradient(0, 0, 15, 0, 0, auraRadius);
-  aura.addColorStop(0, boss.state === 'defeated' ? 'rgba(56, 189, 248, 0.45)' : 'rgba(239, 68, 68, 0.5)');
+  if (boss.state === 'defeated') {
+    aura.addColorStop(0, 'rgba(56, 189, 248, 0.45)');
+  } else if (boss.type === 1) {
+    aura.addColorStop(0, 'rgba(239, 68, 68, 0.52)');
+  } else {
+    aura.addColorStop(0, 'rgba(168, 85, 247, 0.6)');
+  }
   aura.addColorStop(1, 'rgba(0, 0, 0, 0)');
   ctx.fillStyle = aura;
   ctx.beginPath();
   ctx.arc(0, 0, auraRadius, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.font = '92px Arial';
+  // رسم وجه البيبي
+  ctx.font = '94px Arial';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  const wobble = Math.sin(now * 0.015) * 0.08;
-  ctx.rotate(wobble);
   ctx.fillText(boss.state === 'defeated' ? '😭' : '👶', 0, 0);
 
   if (boss.state === 'fighting') {
-    ctx.font = '32px Arial';
-    ctx.fillText('🦈', 0, -56);
+    if (boss.type === 1) {
+      // تاج القرش للوحش الأول
+      ctx.font = '34px Arial';
+      ctx.fillText('🦈', 0, -56);
+    } else {
+      // نضارة الشمس الكول للوحش التاني على عينه!
+      ctx.save();
+      ctx.fillStyle = '#090d16';
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.roundRect(-34, -14, 29, 17, 4);
+      ctx.roundRect(5, -14, 29, 17, 4);
+      ctx.fill();
+      ctx.stroke();
 
+      // جسر النضارة الذهبي
+      ctx.strokeStyle = '#fde047';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(-5, -7);
+      ctx.lineTo(5, -7);
+      ctx.stroke();
+
+      // لمعة على العدسات
+      ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(-28, -11);
+      ctx.lineTo(-22, -2);
+      ctx.moveTo(11, -11);
+      ctx.lineTo(17, -2);
+      ctx.stroke();
+      ctx.restore();
+
+      // نوتات موسيقية طايرة حواليه وهو بيرقص
+      ctx.font = '24px Arial';
+      const noteYOffset = Math.sin(boss.dancePhase * 0.8) * 6;
+      ctx.fillText('🎵', -54, -36 + noteYOffset);
+      ctx.fillText('🎶', 54, -40 - noteYOffset);
+
+      // الإيد اللي بيرمي بيها الأكل الضار
+      ctx.save();
+      const handX = boss.handSide * 52;
+      const handY = 14 - boss.handSwing * 14;
+      ctx.translate(handX, handY);
+      ctx.rotate(boss.handSide * (0.3 + boss.handSwing * 0.9));
+      ctx.font = '36px Arial';
+      ctx.fillText('🫴', 0, 0);
+      ctx.restore();
+    }
+
+    // شريط صحة/موجات الوحش
     const remainingRatio = Math.max(0, (boss.maxWaves - boss.wavesThrown) / boss.maxWaves);
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
     ctx.beginPath();
-    ctx.roundRect(-55, 52, 110, 10, 5);
+    ctx.roundRect(-56, 54, 112, 10, 5);
     ctx.fill();
 
-    ctx.fillStyle = '#ef4444';
+    ctx.fillStyle = boss.type === 1 ? '#ef4444' : '#a855f7';
     ctx.beginPath();
-    ctx.roundRect(-53, 54, 106 * remainingRatio, 6, 3);
+    ctx.roundRect(-54, 56, 108 * remainingRatio, 6, 3);
     ctx.fill();
   } else if (boss.state === 'defeated') {
-    ctx.font = '24px Arial';
-    ctx.fillText('💦', -48, 10);
-    ctx.fillText('💦', 48, 10);
+    ctx.font = '26px Arial';
+    ctx.fillText('💦', -50, 10);
+    ctx.fillText('💦', 50, 10);
   }
 
   ctx.restore();
@@ -1199,15 +1443,15 @@ function drawSideWarnings(dt) {
     const w = sideWarnings[i];
     w.timer -= dt;
 
-    const wx = w.fromLeft ? 22 : canvas.width - 22;
+    const wx = w.fromLeft ? 24 : canvas.width - 24;
     ctx.save();
     ctx.fillStyle = 'rgba(239, 68, 68, 0.9)';
     ctx.beginPath();
-    ctx.arc(wx, w.y, 16, 0, Math.PI * 2);
+    ctx.arc(wx, w.y, 18, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.fillStyle = '#fef08a';
-    ctx.font = '900 16px Cairo, sans-serif';
+    ctx.font = '900 18px Cairo, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(w.fromLeft ? '➡️' : '⬅️', wx, w.y);
@@ -1254,7 +1498,7 @@ function drawBasket() {
   ctx.roundRect(-hw, -hh + 3, width, 10, 5);
   ctx.fill();
 
-  ctx.font = '16px Arial';
+  ctx.font = '17px Arial';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(skin.badge, 0, 5);
@@ -1266,30 +1510,32 @@ function drawFood(item) {
   ctx.save();
   ctx.beginPath();
   ctx.arc(item.x, item.y, item.radius, 0, Math.PI * 2);
-  ctx.fillStyle = item.isBossShot ? '#fef2f2' : '#ffffff';
-  ctx.shadowColor = item.isSide || item.isBossShot ? 'rgba(239, 68, 68, 0.45)' : 'rgba(0,0,0,0.16)';
-  ctx.shadowBlur = 8;
+  ctx.fillStyle = item.isCurved ? '#faf5ff' : (item.isBossShot ? '#fef2f2' : '#ffffff');
+  ctx.shadowColor = item.isCurved ? 'rgba(168, 85, 247, 0.55)' : (item.isSide || item.isBossShot ? 'rgba(239, 68, 68, 0.45)' : 'rgba(0,0,0,0.18)');
+  ctx.shadowBlur = 9;
   ctx.fill();
 
-  ctx.lineWidth = 2.5;
-  ctx.strokeStyle = item.good ? '#22c55e' : '#ef4444';
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = item.good ? '#22c55e' : (item.isCurved ? '#a855f7' : '#ef4444');
   ctx.stroke();
   ctx.restore();
 
-  ctx.font = '24px Arial';
+  // إيموجي أكبر وأوضح
+  ctx.font = '33px Arial';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(item.emoji, item.x, item.y + 1);
 
-  ctx.font = 'bold 10.5px Cairo, Tahoma, sans-serif';
+  // اسم الأكلة بخط أكبر
+  ctx.font = 'bold 12px Cairo, Tahoma, sans-serif';
   const tw = ctx.measureText(item.name).width;
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.94)';
   ctx.beginPath();
-  ctx.roundRect(item.x - tw / 2 - 5, item.y + item.radius + 2, tw + 10, 15, 7);
+  ctx.roundRect(item.x - tw / 2 - 6, item.y + item.radius + 2, tw + 12, 18, 8);
   ctx.fill();
 
   ctx.fillStyle = '#0f172a';
-  ctx.fillText(item.name, item.x, item.y + item.radius + 9.5);
+  ctx.fillText(item.name, item.x, item.y + item.radius + 11);
 }
 
 // =========================================================
@@ -1332,13 +1578,12 @@ function gameLoop(now) {
     updateBoss(dt);
   } else {
     spawnTimer += dt;
-    const spawnInterval = Math.max(0.38, 0.95 - elapsedSeconds * 0.0065);
+    const spawnInterval = Math.max(0.4, 0.95 - elapsedSeconds * 0.0065);
     if (spawnTimer >= spawnInterval) {
       spawnTimer = 0;
       spawnTopFood();
     }
 
-    // الهجمات الجانبية تبدأ بعد 200 نقطة في الجيم
     if (currentGameScore >= 200) {
       sideSpawnTimer += dt;
       const sideInterval = Math.max(1.9, 4.0 - Math.floor(currentGameScore / 400) * 0.25);
@@ -1353,13 +1598,17 @@ function gameLoop(now) {
 
   for (let i = items.length - 1; i >= 0; i--) {
     const item = items[i];
+    // تطبيق تسارع الكرف لو الرمية بكرف
+    if (item.ax) {
+      item.vx += item.ax * dt;
+    }
     item.x += (item.vx || 0) * dt;
     item.y += item.vy * dt;
     drawFood(item);
 
     const caught =
-      item.y + item.radius >= basket.y + 5 &&
-      item.y - item.radius <= basket.y + basket.height &&
+      item.y + item.radius * 0.85 >= basket.y + 4 &&
+      item.y - item.radius * 0.85 <= basket.y + basket.height &&
       item.x + item.radius * 0.55 >= basket.x &&
       item.x - item.radius * 0.55 <= basket.x + basket.width;
 
@@ -1406,7 +1655,7 @@ function gameLoop(now) {
         return;
       }
 
-      // تفعيل الوحش عند 500 سكور في الجيم!
+      // تفعيل الوحش الأول عند 500 والوحش التاني عند 1000
       if (boss.state === 'idle' && currentGameScore >= nextBossGameScore) {
         startBossSequence();
       }
@@ -1414,9 +1663,9 @@ function gameLoop(now) {
     }
 
     if (
-      item.y - item.radius > canvas.height + 35 ||
-      item.x < -60 ||
-      item.x > canvas.width + 60
+      item.y - item.radius > canvas.height + 45 ||
+      item.x < -90 ||
+      item.x > canvas.width + 90
     ) {
       items.splice(i, 1);
     }
