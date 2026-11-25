@@ -3,12 +3,27 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>سلة الأم المرضعة ULTRA</title>
+  <title>Super Mommy - كلية التربية النوعية | جامعة عين شمس</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
 
   <div class="game-wrapper">
+    <!-- شاشة شعار الكلية أول ما التطبيق يفتح -->
+    <div class="splash-overlay" id="splashOverlay">
+      <div class="splash-content">
+        <img
+          src="logo.jpg"
+          onerror="if(this.src.endsWith('logo.jpg')){this.src='logo.png';}else{this.style.display='none';}"
+          alt="شعار كلية التربية النوعية - جامعة عين شمس"
+          class="splash-logo"
+        />
+        <div class="splash-loader">
+          <div class="splash-loader-bar"></div>
+        </div>
+      </div>
+    </div>
+
     <!-- الشريط العلوي الموحد جوه الجيم -->
     <header class="game-hud hidden" id="gameHud">
       <div class="hud-right">
@@ -87,6 +102,13 @@
           </div>
         </div>
 
+        <!-- اسم اللعبة + الكلية والجامعة + الإشراف -->
+        <div class="lobby-brand-header">
+          <h1 class="super-mommy-title">Super Mommy</h1>
+          <div class="faculty-sub">كلية التربية النوعية | جامعة عين شمس</div>
+          <div class="supervisor-sub">تحت إشراف د/ محمود رفعت</div>
+        </div>
+
         <!-- مسرح البيبي اللي بيكربش ويلبس النضارة ويرقص -->
         <div class="baby-stage" id="babyStage">
           <div class="stage-spotlight"></div>
@@ -94,7 +116,7 @@
           <div class="tap-audio-hint" id="tapAudioHint">🔊 المس الشاشة لتشغيل مزيكا الرقص</div>
 
           <div class="baby-actor" id="babyActor">
-            <svg class="baby-svg" viewBox="0 0 140 95" width="115" height="76">
+            <svg class="baby-svg" viewBox="0 0 140 95" width="104" height="68">
               <ellipse cx="70" cy="84" rx="44" ry="6" fill="rgba(56, 189, 248, 0.25)" />
               <path class="limb-leg-back" d="M92 58 Q112 60 118 74 L106 78 Q98 68 86 66 Z" fill="#fbcfe8" stroke="#f472b6" stroke-width="2"/>
               <rect x="52" y="44" width="46" height="24" rx="12" fill="#38bdf8" />
@@ -130,7 +152,7 @@
         <div class="duolingo-card">
           <div class="duo-header">
             <div>
-              <h1 class="tech-title" id="mapTitleSecret">خريطة المراحل 🗺️</h1>
+              <h2 class="tech-title" id="mapTitleSecret">خريطة المراحل 🗺️</h2>
               <span class="best-score-inline" id="bestScoreBadge">👑 أعلى سكور: 0</span>
             </div>
             <button class="btn-food-guide" id="openGuideBtn">📋 دليل الأكلات</button>
@@ -183,6 +205,41 @@
             <span id="startBtnText">ابدأ المرحلة 1</span>
             <span>🚀</span>
           </button>
+        </div>
+
+        <!-- شريط أسماء طلاب فريق العمل في آخر الصفحة بدون ما ياخد مساحة -->
+        <div class="team-ticker-bar" id="teamTickerBar" title="اضغط لعرض أسماء فريق العمل كاملة">
+          <span class="team-ticker-label">فريق العمل</span>
+          <div class="team-ticker-viewport">
+            <div class="team-ticker-track">
+              <span>محمود جمال محمد • فرح عبدالمنعم عبدالحميد • اميره عبدالهادي سمير • مريم مصطفى عبدالحميد • حازم فولي أمين • بشرى سعيد عبداللطيف • شيرين ناصر عبدالله • محمد حازم محمد • ابراهيم خالد طه • ملك عاطف عبدالحميد</span>
+              <span>محمود جمال محمد • فرح عبدالمنعم عبدالحميد • اميره عبدالهادي سمير • مريم مصطفى عبدالحميد • حازم فولي أمين • بشرى سعيد عبداللطيف • شيرين ناصر عبدالله • محمد حازم محمد • ابراهيم خالد طه • ملك عاطف عبدالحميد</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- نافذة عرض فريق العمل بالكامل عند الضغط على الشريط -->
+      <section class="overlay confirm-overlay hidden" id="teamModalOverlay">
+        <div class="confirm-box team-modal-box">
+          <div class="team-modal-top">
+            <h2>🎓 طلاب فريق العمل</h2>
+            <button class="hud-btn btn-exit" id="closeTeamModalBtn">✖</button>
+          </div>
+          <p class="team-modal-faculty">كلية التربية النوعية | جامعة عين شمس</p>
+          <p class="team-modal-supervisor">تحت إشراف د/ محمود رفعت</p>
+          <div class="team-names-grid">
+            <div class="team-name-chip">1. محمود جمال محمد</div>
+            <div class="team-name-chip">2. فرح عبدالمنعم عبدالحميد</div>
+            <div class="team-name-chip">3. اميره عبدالهادي سمير</div>
+            <div class="team-name-chip">4. مريم مصطفى عبدالحميد</div>
+            <div class="team-name-chip">5. حازم فولي أمين</div>
+            <div class="team-name-chip">6. بشرى سعيد عبداللطيف</div>
+            <div class="team-name-chip">7. شيرين ناصر عبدالله</div>
+            <div class="team-name-chip">8. محمد حازم محمد</div>
+            <div class="team-name-chip">9. ابراهيم خالد طه</div>
+            <div class="team-name-chip">10. ملك عاطف عبدالحميد</div>
+          </div>
         </div>
       </section>
 
