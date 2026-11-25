@@ -218,7 +218,6 @@ function updateAllUI() {
     }
 
     if (isStage3BossActive) {
-      // وقت الوحش في ليفل 3: إخفاء شريط صحة الرضيع وإظهار 3 قلوب فقط
       if (babyHpWrap) babyHpWrap.classList.add('hidden');
       livesDisplay.classList.remove('hidden');
       let heartsHTML = '';
@@ -227,7 +226,6 @@ function updateAllUI() {
       }
       livesDisplay.innerHTML = heartsHTML;
     } else {
-      // قبل الوحش في ليفل 3: شريط صحة الرضيع بدون قلوب
       if (babyHpWrap) babyHpWrap.classList.remove('hidden');
       livesDisplay.classList.add('hidden');
       const hpClamped = Math.max(0, Math.min(100, Math.round(babyHealth)));
@@ -272,6 +270,44 @@ document.getElementById('mapTitleSecret').addEventListener('click', () => {
     secretTapCount = 0;
   }
 });
+
+// =========================================================
+// شاشة شعار الكلية عند فتح التطبيق + نافذة فريق العمل
+// =========================================================
+(function initSplashAndTeamModal() {
+  const splashOverlay = document.getElementById('splashOverlay');
+  if (splashOverlay) {
+    const dismissSplash = () => {
+      if (splashOverlay.classList.contains('fade-out')) return;
+      splashOverlay.classList.add('fade-out');
+      setTimeout(() => {
+        splashOverlay.classList.add('hidden');
+      }, 520);
+      startLobbyBabyAnimation();
+    };
+    setTimeout(dismissSplash, 2100);
+    splashOverlay.addEventListener('click', dismissSplash);
+  }
+
+  const teamTickerBar = document.getElementById('teamTickerBar');
+  const teamModalOverlay = document.getElementById('teamModalOverlay');
+  const closeTeamModalBtn = document.getElementById('closeTeamModalBtn');
+
+  if (teamTickerBar && teamModalOverlay) {
+    teamTickerBar.addEventListener('click', (e) => {
+      e.stopPropagation();
+      teamModalOverlay.classList.remove('hidden');
+    });
+  }
+  if (closeTeamModalBtn && teamModalOverlay) {
+    closeTeamModalBtn.addEventListener('click', () => {
+      teamModalOverlay.classList.add('hidden');
+    });
+    teamModalOverlay.addEventListener('click', (e) => {
+      if (e.target === teamModalOverlay) teamModalOverlay.classList.add('hidden');
+    });
+  }
+})();
 
 // =========================================================
 // محرك الصوت والموسيقى
@@ -1368,7 +1404,6 @@ function startBossSequence(bossType) {
     bossBanner.textContent = '🕶️🕺 تحذير! البيبي الراقص أبو نضارة دخل الساحة 🕺🕶️';
     setTipUI('tip-boss', '🕶️', 'احذر! بيرقص بحركات عشوائية وبيرمي الأكل الضار بكرف ومستقيم!');
   } else {
-    // عند ظهور الوحش في المرحلة 3: نرجعها 3 قلوب فقط!
     heartsRemaining = 3;
     volcanoThemeActive = true;
     triggerVolcanoExplosion();
@@ -2044,7 +2079,6 @@ function gameLoop(now) {
     if (paddle.swingAnim > 0) paddle.swingAnim = Math.max(0, paddle.swingAnim - dt * 3.5);
 
     if (boss.state === 'idle') {
-      // قبل الوحش: تدهور صحة الرضيع تدريجياً
       const baseDrain = stage3Phase === 'frenzy' ? 4.4 : 3.7;
       const totalDrain = baseDrain + babyDrainPenalty;
       babyHealth -= totalDrain * dt;
